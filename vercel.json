@@ -2,19 +2,19 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/search.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
-      "src": "/api/search",
-      "dest": "api/search.py",
+      "src": "/api/index",
+      "dest": "api/index.py",
       "methods": ["POST"]
     },
     {
       "src": "/",
-      "dest": "api/search.py"
+      "dest": "api/index.py"
     }
   ]
 }
