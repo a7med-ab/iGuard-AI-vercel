@@ -4,7 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 import logging
 from transformers import pipeline
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer # type: ignore
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
@@ -12,7 +12,7 @@ import numpy as np
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Initialize Flask app and enable CORS
-app = Flask(_name_)
+app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:8080"}})  # Allow Spring Boot requests
 
 # Dark Web Search Class
@@ -145,5 +145,5 @@ def aisearch():
     return jsonify({"results": results})  # Send the results back to the Spring Boot app
 
 # Run the app
-if _name_ == '_main_':
+if __name__ == '_main_':
     app.run(debug=True, host='0.0.0.0', port=5000)
