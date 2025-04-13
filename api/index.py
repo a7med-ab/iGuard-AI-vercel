@@ -1,23 +1,23 @@
+# api/search.py
+import os
+import logging
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # Import the CORS module
+from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
-import logging
 from transformers import pipeline
-from sentence_transformers import SentenceTransformer # type: ignore
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Initialize Flask app and enable CORS
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:8080"}})  # Allow Spring Boot requests
+CORS(app)
 
-# Dark Web Search Class
 class DarkWebSearch:
-    def _init_(self):
+    def __init__(self):
         self.categories = {
             "Hacking": "Cyber security, penetration testing, exploits, vulnerabilities, malware",
             "Drugs": "Illicit substances, narcotics, drug trafficking, cannabis, cocaine",
@@ -29,20 +29,22 @@ class DarkWebSearch:
             "Services": "Hacking for hire, money laundering, document forgery"
         }
         
-        # Initialize NLP models
+        # Initialize NLP models with smaller versions for Vercel
         self.classifier = None
         self.sentence_model = None
         self.initialize_models()
 
     def initialize_models(self):
-        """Load the NLP models for classification"""
+        """Load optimized NLP models for Vercel"""
         try:
-            logging.info("Loading NLP models...")
-            self.classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
-            self.sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
-            logging.info("Models loaded successfully")
+            logging.info("Loading optimized NLP models...")
+            # Using smaller models to fit Vercel's limitations
+            self.classifier = pipeline("zero-shot-classification", 
+                                     model="typeform/distilbert-base-uncased-mnli")
+            self.sentence_model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
+            logging.info("Optimized models loaded successfully")
         except Exception as e:
-            logging.error(f"Failed to load models: {e}")
+            logging.error(f"Failed to load optimized models: {e}")
 
     def classify_text(self, text):
         """Classify text using NLP or fallback to keywords"""
@@ -59,7 +61,8 @@ class DarkWebSearch:
                 
                 # Method 2: Semantic similarity
                 text_embedding = self.sentence_model.encode(text)
-                category_embeddings = {k: self.sentence_model.encode(v) for k, v in self.categories.items()}
+                category_embeddings = {k: self.sentence_model.encode(v) 
+                                      for k, v in self.categories.items()}
                 
                 similarities = {
                     cat: cosine_similarity([text_embedding], [cat_embed])[0][0]
@@ -97,7 +100,10 @@ class DarkWebSearch:
         """Perform the actual dark web search"""
         try:
             url = f"https://ahmia.fi/search/?q={query}"
-            response = requests.get(url, timeout=15)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, "html.parser")
@@ -130,20 +136,62 @@ class DarkWebSearch:
             logging.error(f"Search failed: {e}")
             return []
 
-# Create the Flask route to handle the POST request
-@app.route('/api/aisearch', methods=['POST'])
-def aisearch():
-    data = request.get_json()  # Retrieve data sent by Spring Boot
-    query = data.get("query")  # Access query field
+# Initialize the search tool
+searcher = DarkWebSearch()
 
-    if not query:
-        return jsonify({"error": "Query parameter is missing"}), 400
+@app.route('/api/search', methods=['POST'])
+def search():
+    try:
+        data = request.get_json()
+        query = data.get('query', '').strip()
+        
+        if not query:
+            return jsonify({'error': 'Query parameter is required'}), 400
+        
+        if len(query) > 100:
+            return jsonify({'error': 'Query too long (max 100 characters)'}), 400
+        
+        results = searcher.search_ahmia(query)
+        return jsonify({
+            'query': query,
+            'results': results
+        })
+    
+    except Exception as e:
+        logging.error(f"API error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-    searcher = DarkWebSearch()
-    results = searcher.search_ahmia(query)
+@app.route('/')
+def home():
+    return jsonify({
+        'message': 'Dark Web Search API',
+        'endpoints': {
+            '/api/search': 'POST with {"query": "your search term"}'
+        }
+    })
 
-    return jsonify({"results": results})  # Send the results back to the Spring Boot app
+# Vercel handler
+def handler(event, context):
+    from flask import Response
+    from werkzeug.wrappers import Request
+    from werkzeug.datastructures import Headers
 
-# Run the app
-if __name__ == '_main_':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    with app.app_context():
+        headers = Headers(event.get('headers', {}))
+        request = Request({
+            'REQUEST_METHOD': event.get('httpMethod', 'GET'),
+            'PATH_INFO': event.get('path', '/'),
+            'QUERY_STRING': event.get('queryStringParameters', {}),
+            'wsgi.input': event.get('body', ''),
+            'headers': headers,
+        })
+        
+        response = app.full_dispatch_request(request)
+        return {
+            'statusCode': response.status_code,
+            'headers': dict(response.headers),
+            'body': response.get_data(as_text=True)
+        }
+
+if __name__ == '__main__':
+    app.run(debug=True)
