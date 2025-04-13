@@ -1,10 +1,20 @@
 {
   "version": 2,
   "builds": [
-    { "src": "index.py", "use": "@vercel/python" }
+    {
+      "src": "api/search.py",
+      "use": "@vercel/python"
+    }
   ],
   "routes": [
-    { "src": "/", "dest": "index.py" },
-    { "src": "/", "dest": "index.py" }
+    {
+      "src": "/api/search",
+      "dest": "api/search.py",
+      "methods": ["POST"]
+    },
+    {
+      "src": "/",
+      "dest": "api/search.py"
+    }
   ]
 }
